@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>멋쟁이 멍이의 대모험</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+        
+        body {
+            font-family: 'Jua', sans-serif;
+            background-color: #fdf2f8; /* 따뜻한 핑크 배경 */
+            touch-action: none; /* 모바일 제스처 꼬임 방지 */
+            user-select: none;
+        }
+
+        #game-container {
+            box-shadow: 0 10px 25px -5px rgba(236, 72, 153, 0.3);
+            aspect-ratio: 21 / 9; 
+        }
+
+        @media (max-width: 640px) {
+            #game-container {
+                aspect-ratio: 16 / 9; 
+            }
+            .control-btn {
+                font-size: 1.25rem;
+                padding: 1rem 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-2 sm:p-4">
+
+    <!-- 상단 헤더 -->
+    <div class="mb-2 sm:mb-4 text-center">
+        <h1 class="text-3xl sm:text-5xl text-pink-500 drop-shadow-sm mb-1 sm:mb-2">멋쟁이 멍이의 대모험 🐈</h1>
+        <p class="text-gray-500 text-xs sm:text-base">점프(⬆️), 숙이기(⬇️), 냥냥펀치 발사(Space/Z)로 피하고 부수세요! (500점 보스 등장!)</p>
+    </div>
+
+    <!-- 게임 화면 영역 -->
+    <div id="game-container" class="relative w-full max-w-[800px] bg-sky-100 rounded-2xl overflow-hidden border-4 border-pink-300">
+        <!-- 게임 캔버스 -->
+        <canvas id="gameCanvas" class="w-full h-full block"></canvas>
+
+        <!-- 실시간 점수 표시 -->
+        <div class="absolute top-3 right-5 text-xl sm:text-3xl text-gray-700 font-bold tracking-wider drop-shadow-sm">
+            SCORE: <span id="scoreVal">0</span>
+        </div>
+
+        <!-- 게임 오버 / 승리 및 시작 오버레이 -->
+        <div id="ui-overlay" class="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-10 transition-opacity duration-300">
+            <h2 id="overlay-title" class="text-3xl sm:text-5xl text-pink-600 mb-4 drop-shadow-sm text-center">준비되셨나요?</h2>
+            
+            <p id="final-score" class="hidden text-xl sm:text-2xl text-gray-700 mb-6">최종 점수: <span class="text-pink-500 font-bold text-2xl sm:text-3xl">0</span></p>
+            
+            <button id="start-btn" class="mb-5 bg-pink-500 hover:bg-pink-600 text-white text-xl sm:text-2xl py-3 px-8 rounded-full shadow-lg transform transition active:scale-95 cursor-pointer">
+                게임 시작
+            </button>
+
+            <!-- 가로 배열 조작키 설명 -->
+            <div id="controls-help" class="text-gray-700 bg-white/60 px-4 sm:px-6 py-2 sm:py-3 rounded-full shadow-sm border border-pink-200 text-xs sm:text-sm flex flex-row flex-wrap justify-center items-center gap-2 sm:gap-4 font-medium">
+                <span>⬆️ 점프</span>
+                <span class="text-pink-300">|</span>
+                <span>⬇️ 숙이기</span>
+                <span class="text-pink-300">|</span>
+                <span>⬅️ ➡️ 이동</span>
+                <span class="text-pink-300">|</span>
+                <span>🐾(Space) 냥냥펀치</span>
+            </div>
+        </div>
+
+    <!-- 모바일용 온스크린 컨트롤 버튼 -->
+    <div class="flex justify-between w-full max-w-[800px] mt-4 gap-1 sm:gap-2 px-1">
+        <button id="btn-left" class="control-btn flex-1 bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 rounded-xl shadow-md active:scale-95 active:bg-gray-600 transition touch-manipulation">
+            ⬅️
+        </button>
+        <button id="btn-right" class="control-btn flex-1 bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 rounded-xl shadow-md active:scale-95 active:bg-gray-600 transition touch-manipulation">
+            ➡️
+        </button>
+        <button id="btn-duck" class="control-btn flex-1 bg-blue-400 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-md active:scale-95 active:bg-blue-600 transition touch-manipulation">
+            ⬇️
+        </button>
+        <button id="btn-jump" class="control-btn flex-1 bg-green-400 hover:bg-green-500 text-white font-bold py-3 rounded-xl shadow-md active:scale-95 active:bg-green-600 transition touch-manipulation">
+            ⬆️
+        </button>
+        <button id="btn-shoot" class="control-btn flex-[1.5] bg-pink-400 hover:bg-pink-500 text-white font-bold py-3 rounded-xl shadow-md active:scale-95 active:bg-pink-600 transition touch-manipulation">
+            🐾 냥냥
+        </button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        
+        // 캔버스의 내부 해상도 고정
+        canvas.width = 800;
+        canvas.height = 340;
+
+        // DOM 요소
+        const uiOverlay = document.getElementById("ui-overlay");
+        const overlayTitle = document.getElementById("overlay-title");
+        const controlsHelp = document.getElementById("controls-help");
+        const startBtn = document.getElementById("start-btn");
+        const scoreVal = document.getElementById("scoreVal");
+        const finalScore = document.getElementById("final-score");
+        const finalScoreSpan = finalScore.querySelector("span");
+
+        const btnLeft = document.getElementById("btn-left");
+        const btnRight = document.getElementById("btn-right");
+        const btnJump = document.getElementById("btn-jump");
+        const btnDuck = document.getElementById("btn-duck");
+        const btnShoot = document.getElementById("btn-shoot");
+
+        let isPlaying = false;
+        let animationId;
+        let score = 0;
+        let gameSpeed = 6;
+        let spawnTimer = 0;
+
+        const groundY = 290;
+
+        // 고양이 객체 (전신 🐈)
+        const cat = {
+            x: 80,
+            y: 0,
+            width: 60, // 전신이라 조금 더 김
+            normalHeight: 50,
+            duckHeight: 25,
+            height: 50,
+            dy: 0,
+            jumpForce: -15, 
+            gravity: 0.8,
+            speed: 6, // 좌우 이동 속도
+            isJumping: false,
+            isDucking: false,
+            isMovingLeft: false,
+            isMovingRight: false,
+            shootCooldown: 0,
+            
+            draw() {
+                ctx.save();
+                ctx.textBaseline = "top";
+                
+                if (this.isDucking) {
+                    // 엎드렸을 때 납작하게 (스케일에 맞춰 y좌표 조정)
+                    ctx.scale(-1, 0.5); 
+                    ctx.font = "50px sans-serif";
+                    ctx.fillText("🐈", -this.x - this.width, this.y * 2); 
+                } else {
+                    // 평소 상태 (오른쪽 바라보게 반전)
+                    ctx.scale(-1, 1);
+                    ctx.font = "50px sans-serif";
+                    ctx.fillText("🐈", -this.x - this.width, this.y);
+                }
+                ctx.restore();
+            },
+            
+            update() {
+                if (this.isMovingLeft) this.x -= this.speed;
+                if (this.isMovingRight) this.x += this.speed;
+                
+                // 좌우 경계 제한 (화면 왼쪽 절반까지만 이동 가능)
+                if (this.x < 0) this.x = 0;
+                if (this.x > canvas.width / 2 - this.width) this.x = canvas.width / 2 - this.width;
+
+                // 중력 적용
+                this.dy += this.gravity;
+                this.y += this.dy;
+
+                // 바닥 충돌 처리
+                if (this.y + this.height > groundY) {
+                    this.y = groundY - this.height;
+                    this.dy = 0;
+                    this.isJumping = false;
+                }
+
+                if (this.shootCooldown > 0) this.shootCooldown--;
+
+                this.draw();
+            },
+            
+            jump() {
+                if (!this.isJumping && !this.isDucking) {
+                    this.dy = this.jumpForce;
+                    this.isJumping = true;
+                }
+            },
+
+            setDucking(isDucking) {
+                if (isDucking && !this.isJumping && !this.isDucking) {
+                    this.isDucking = true;
+                    this.height = this.duckHeight;
+                    this.y = groundY - this.height;
+                } else if (!isDucking && this.isDucking) {
+                    this.isDucking = false;
+                    this.height = this.normalHeight;
+                    this.y = groundY - this.height;
+                }
+            },
+
+            shoot() {
+                if (this.shootCooldown <= 0) {
+                    projectiles.push({
+                        x: this.x + this.width - 10,
+                        y: this.y + 10,
+                        width: 35,
+                        height: 35,
+                        speed: 12
+                    });
+                    this.shootCooldown = 15;
+                }
+            }
+        };
+
+        // 의사 선생님 보스 👨‍⚕️
+        const boss = {
+            active: false,
+            x: 650,
+            y: 50,
+            width: 70,
+            height: 70,
+            hp: 20,
+            maxHp: 20,
+            dy: 3,
+            shootTimer: 0,
+
+            draw() {
+                if (!this.active) return;
+                ctx.save();
+                ctx.textBaseline = "top";
+                ctx.font = "70px sans-serif";
+                ctx.fillText("👨‍⚕️", this.x, this.y);
+                
+                // 보스 체력바
+                ctx.fillStyle = "red";
+                ctx.fillRect(this.x, this.y - 15, this.width, 10);
+                ctx.fillStyle = "#22c55e"; // 초록색 체력
+                ctx.fillRect(this.x, this.y - 15, this.width * (this.hp / this.maxHp), 10);
+                
+                ctx.restore();
+            },
+
+            update() {
+                if (!this.active) return;
+                
+                // 위아래로 움직임
+                this.y += this.dy;
+                if (this.y <= 20 || this.y >= groundY - this.height - 20) {
+                    this.dy *= -1; // 벽에 닿으면 방향 반전
+                }
+                
+                // 공격 쿨타임
+                this.shootTimer--;
+                if (this.shootTimer <= 0) {
+                    this.shoot();
+                    // 보스가 쏠 때마다 속도가 약간 변동
+                    this.shootTimer = Math.floor(Math.random() * 40 + 40); 
+                }
+                
+                this.draw();
+            },
+
+            shoot() {
+                bossProjectiles.push({
+                    x: this.x - 20,
+                    y: this.y + 30,
+                    width: 40,
+                    height: 40,
+                    speed: 8 + (gameSpeed - 6), // 게임 스피드에 비례해 주사기 속도도 증가
+                    emoji: "💉"
+                });
+            }
+        };
+
+        // 배열들
+        let obstacles = [];
+        let projectiles = [];
+        let bossProjectiles = [];
+        let particles = []; 
+
+        class Obstacle {
+            constructor() {
+                this.x = canvas.width;
+                this.width = 45;
+                this.height = 45;
+                
+                const randType = Math.random();
+                if (randType < 0.2) {
+                    // 20% 확률로 무적 청진기 등장 (냥냥펀치 통과 불가)
+                    this.emoji = "🩺";
+                    this.hp = Infinity; // 파괴 불가
+                } else {
+                    this.emoji = Math.random() > 0.4 ? "💉" : "💊";
+                    
+                    // 장애물별 HP 설정
+                    if (this.emoji === "💊") {
+                        this.hp = 3;
+                    } else {
+                        this.hp = 2;
+                    }
+                }
+                
+                // 3단 높이 설정 (모든 장애물 무작위 생성)
+                const randHeight = Math.random();
+                if (randHeight < 0.30) {
+                    this.y = groundY - 45; // 1단 (바닥 - 30%) - 점프
+                } else if (randHeight < 0.80) {
+                    this.y = groundY - 75; // 1.5단 (머리 높이 - 50%) - 숙이기
+                } else {
+                    this.y = groundY - 120; // 3단 (공중 - 20%) - 그냥 지나가거나 밑으로 이동
+                }
+            }
+            
+            draw() {
+                ctx.textBaseline = "top";
+                ctx.font = "45px sans-serif";
+                ctx.fillText(this.emoji, this.x, this.y);
+
+                // 체력(HP) 텍스트 그리기
+                ctx.font = "bold 16px sans-serif";
+                if (this.hp === Infinity) {
+                    ctx.fillStyle = "#3b82f6"; // 파란색 경고 텍스트
+                    ctx.fillText(`피해!`, this.x, this.y - 20);
+                } else {
+                    ctx.fillStyle = "#ef4444";
+                    ctx.fillText(`HP:${this.hp}`, this.x, this.y - 20);
+                }
+            }
+            
+            update() {
+                this.x -= gameSpeed;
+                this.draw();
+            }
+        }
+
+        // 파티클 효과
+        class Particle {
+            constructor(x, y, emoji) {
+                this.x = x;
+                this.y = y;
+                this.emoji = emoji;
+                this.size = Math.random() * 20 + 10;
+                this.dx = (Math.random() - 0.5) * 10;
+                this.dy = (Math.random() - 0.5) * 10 - 5;
+                this.life = 1.0;
+            }
+            update() {
+                this.x += this.dx;
+                this.y += this.dy;
+                this.dy += 0.5; 
+                this.life -= 0.05;
+                
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.font = `${this.size}px sans-serif`;
+                ctx.fillText(this.emoji === "💢" ? "💢" : "✨", this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        function init() {
+            obstacles = [];
+            projectiles = [];
+            bossProjectiles = [];
+            particles = [];
+            score = 0;
+            gameSpeed = 6;
+            spawnTimer = 0;
+            
+            boss.active = false;
+            boss.hp = boss.maxHp;
+
+            cat.x = 80;
+            cat.height = cat.normalHeight;
+            cat.y = groundY - cat.height;
+            cat.dy = 0;
+            cat.isJumping = false;
+            cat.isDucking = false;
+            cat.isMovingLeft = false;
+            cat.isMovingRight = false;
+            cat.shootCooldown = 0;
+            
+            scoreVal.innerText = score;
+            uiOverlay.classList.add("hidden");
+            finalScore.classList.add("hidden");
+            
+            // 텍스트/색상 원상복구
+            overlayTitle.innerHTML = "준비되셨나요?";
+            overlayTitle.className = "text-3xl sm:text-5xl text-pink-600 mb-4 drop-shadow-sm text-center";
+            controlsHelp.classList.remove("hidden");
+            
+            isPlaying = true;
+            animate();
+        }
+
+        function gameOver() {
+            isPlaying = false;
+            cancelAnimationFrame(animationId);
+            
+            uiOverlay.classList.remove("hidden");
+            overlayTitle.innerHTML = "앗, 치료받을 시간이에요! 😭";
+            overlayTitle.className = "text-3xl sm:text-5xl text-pink-600 mb-4 drop-shadow-sm text-center";
+            controlsHelp.classList.add("hidden");
+            finalScore.classList.remove("hidden");
+            finalScoreSpan.innerText = score;
+            startBtn.innerText = "다시 달리기";
+        }
+
+        function gameWin() {
+            isPlaying = false;
+            cancelAnimationFrame(animationId);
+            
+            uiOverlay.classList.remove("hidden");
+            // 마지막 엔딩 메시지 적용
+            overlayTitle.innerHTML = "🎉 보스 처치 성공! 🎉<br><br><span class='text-2xl sm:text-3xl text-gray-700 leading-relaxed tracking-wide'>멍이야, 나에게 와줘서 고마워.<br>다음에 만날땐 더행복하게 만나자 . 사랑해 💖</span>";
+            overlayTitle.className = "text-3xl sm:text-5xl text-pink-500 mb-4 drop-shadow-sm text-center";
+            controlsHelp.classList.add("hidden");
+            finalScore.classList.remove("hidden");
+            finalScoreSpan.innerText = score;
+            startBtn.innerText = "다시 달리기";
+        }
+
+        function checkCollision(rect1, rect2) {
+            const margin = 10; // 충돌 관대함
+            return (
+                rect1.x + margin < rect2.x + rect2.width - margin &&
+                rect1.x + rect1.width - margin > rect2.x + margin &&
+                rect1.y + margin < rect2.y + rect2.height - margin &&
+                rect1.y + rect1.height - margin > rect2.y + margin
+            );
+        }
+
+        function animate() {
+            if (!isPlaying) return;
+            animationId = requestAnimationFrame(animate);
+            
+            // 화면 지우기
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 바닥 선 그리기
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            ctx.lineTo(canvas.width, groundY);
+            ctx.strokeStyle = "#fbcfe8"; // pink-200
+            ctx.lineWidth = 5;
+            ctx.stroke();
+
+            // 플레이어 업데이트
+            cat.update();
+
+            // 보스 등장 조건 (500점 이상)
+            if (score >= 500 && !boss.active) {
+                boss.active = true;
+                boss.hp = boss.maxHp;
+                obstacles = []; // 잔여 일반 장애물 클리어
+            }
+
+            // 플레이어의 젤리 발사체 업데이트
+            for (let i = 0; i < projectiles.length; i++) {
+                let p = projectiles[i];
+                p.x += p.speed;
+                
+                ctx.textBaseline = "top";
+                ctx.font = "30px sans-serif";
+                ctx.fillText("🐾", p.x, p.y);
+
+                // 화면 밖
+                if (p.x > canvas.width) {
+                    projectiles.splice(i, 1);
+                    i--;
+                    continue;
+                }
+
+                // 젤리와 보스의 충돌
+                if (boss.active && checkCollision(p, boss)) {
+                    boss.hp -= 1;
+                    for(let k=0; k<5; k++) particles.push(new Particle(boss.x + 20, p.y, "💢"));
+                    
+                    projectiles.splice(i, 1);
+                    i--;
+                    score += 10; // 보스 때릴 때도 점수
+                    scoreVal.innerText = score;
+
+                    if (boss.hp <= 0) {
+                        score += 500; // 보스 처치 보너스
+                        scoreVal.innerText = score;
+                        gameWin();
+                        return;
+                    }
+                    continue; // 젤리 파괴되었으므로 다음 루프
+                }
+            }
+
+            // 보스 활성화 상태 처리
+            if (boss.active) {
+                boss.update();
+
+                // 보스의 발사체 업데이트
+                for (let i = 0; i < bossProjectiles.length; i++) {
+                    let bp = bossProjectiles[i];
+                    bp.x -= bp.speed;
+                    
+                    ctx.textBaseline = "top";
+                    ctx.font = "40px sans-serif";
+                    ctx.fillText(bp.emoji, bp.x, bp.y);
+
+                    // 플레이어 피격
+                    if (checkCollision(cat, bp)) {
+                        gameOver();
+                        return;
+                    }
+
+                    // 젤리와 보스 투사체 상쇄 방지(어렵게 하기 위해 상쇄 안 됨)
+                    // 화면 밖 처리
+                    if (bp.x < 0) {
+                        bossProjectiles.splice(i, 1);
+                        i--;
+                    }
+                }
+            } else {
+                // 일반 장애물 소환 (보스가 없을 때만)
+                spawnTimer--;
+                if (spawnTimer <= 0) {
+                    obstacles.push(new Obstacle());
+                    // 장애물 생성 주기 감소 (더 자주, 많이 나옴)
+                    const minSpawn = Math.max(15, 50 - gameSpeed * 4);
+                    const maxSpawn = minSpawn + 30;
+                    spawnTimer = Math.floor(Math.random() * (maxSpawn - minSpawn) + minSpawn);
+                }
+
+                // 장애물 업데이트 및 충돌 검사
+                for (let i = 0; i < obstacles.length; i++) {
+                    let obs = obstacles[i];
+                    obs.update();
+
+                    // 1. 고양이 피격
+                    if (checkCollision(cat, obs)) {
+                        gameOver();
+                        return;
+                    }
+
+                    // 2. 냥냥펀치(젤리)로 타격
+                    let projHit = false;
+                    for (let j = 0; j < projectiles.length; j++) {
+                        let proj = projectiles[j];
+                        if (checkCollision(proj, obs)) {
+                            // 타격 이펙트 (무적 장애물은 튕겨내는 이펙트)
+                            let hitEmoji = obs.hp === Infinity ? "🛡️" : "💥";
+                            for(let k=0; k<3; k++) particles.push(new Particle(obs.x + 20, obs.y + 20, hitEmoji));
+                            
+                            if (obs.hp !== Infinity) {
+                                obs.hp--; // 무적이 아닐 때만 체력 감소
+                            }
+                            
+                            projectiles.splice(j, 1);
+                            j--; 
+                            projHit = true;
+                            
+                            // 체력이 다 닳았을 때 파괴
+                            if (obs.hp <= 0) {
+                                for(let k=0; k<5; k++) particles.push(new Particle(obs.x + 20, obs.y + 20, obs.emoji));
+                                obstacles.splice(i, 1);
+                                i--; 
+                                score += 30;
+                                scoreVal.innerText = score;
+                            }
+                            break; 
+                        }
+                    }
+
+                    // 파괴되었으면 이번 사이클 건너뛰기
+                    if (projHit && obs.hp <= 0) continue;
+
+                    // 3. 화면 밖으로 지나감 (점수 획득 제거)
+                    if (obs.x + obs.width < 0) {
+                        obstacles.splice(i, 1);
+                        i--; 
+                    }
+                }
+                
+                // 난이도 상승 로직
+                if (score > 0 && score % 100 === 0) {
+                    gameSpeed += 0.005; // 속도 미세하게 지속 증가
+                }
+            }
+
+            // 파티클 이펙트
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                if (particles[i].life <= 0) {
+                    particles.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // === 키보드 이벤트 ===
+        window.addEventListener("keydown", (e) => {
+            if (!isPlaying) return;
+            if (e.code === "ArrowUp") { e.preventDefault(); cat.jump(); }
+            if (e.code === "ArrowDown") { e.preventDefault(); cat.setDucking(true); }
+            if (e.code === "ArrowLeft") { e.preventDefault(); cat.isMovingLeft = true; }
+            if (e.code === "ArrowRight") { e.preventDefault(); cat.isMovingRight = true; }
+            if (e.code === "Space" || e.code === "KeyZ") { e.preventDefault(); cat.shoot(); }
+        });
+        window.addEventListener("keyup", (e) => {
+            if (e.code === "ArrowDown") { e.preventDefault(); cat.setDucking(false); }
+            if (e.code === "ArrowLeft") { e.preventDefault(); cat.isMovingLeft = false; }
+            if (e.code === "ArrowRight") { e.preventDefault(); cat.isMovingRight = false; }
+        });
+
+        // === 모바일 터치 / 마우스 이벤트 ===
+        const jumpAction = (e) => { e.preventDefault(); if (isPlaying) cat.jump(); };
+        btnJump.addEventListener("touchstart", jumpAction, { passive: false });
+        btnJump.addEventListener("mousedown", jumpAction);
+
+        const duckStart = (e) => { e.preventDefault(); if (isPlaying) cat.setDucking(true); };
+        const duckEnd = (e) => { e.preventDefault(); cat.setDucking(false); };
+        
+        btnDuck.addEventListener("touchstart", duckStart, { passive: false });
+        btnDuck.addEventListener("mousedown", duckStart);
+        btnDuck.addEventListener("touchend", duckEnd);
+        btnDuck.addEventListener("mouseup", duckEnd);
+        btnDuck.addEventListener("mouseleave", duckEnd);
+
+        const leftStart = (e) => { e.preventDefault(); if (isPlaying) cat.isMovingLeft = true; };
+        const leftEnd = (e) => { e.preventDefault(); cat.isMovingLeft = false; };
+        btnLeft.addEventListener("touchstart", leftStart, { passive: false });
+        btnLeft.addEventListener("mousedown", leftStart);
+        btnLeft.addEventListener("touchend", leftEnd);
+        btnLeft.addEventListener("mouseup", leftEnd);
+        btnLeft.addEventListener("mouseleave", leftEnd);
+
+        const rightStart = (e) => { e.preventDefault(); if (isPlaying) cat.isMovingRight = true; };
+        const rightEnd = (e) => { e.preventDefault(); cat.isMovingRight = false; };
+        btnRight.addEventListener("touchstart", rightStart, { passive: false });
+        btnRight.addEventListener("mousedown", rightStart);
+        btnRight.addEventListener("touchend", rightEnd);
+        btnRight.addEventListener("mouseup", rightEnd);
+        btnRight.addEventListener("mouseleave", rightEnd);
+
+        const shootAction = (e) => { e.preventDefault(); if (isPlaying) cat.shoot(); };
+        btnShoot.addEventListener("touchstart", shootAction, { passive: false });
+        btnShoot.addEventListener("mousedown", shootAction);
+
+        startBtn.addEventListener("click", init);
+    </script>
+</body>
+</html>
