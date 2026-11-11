@@ -650,3 +650,34 @@
     </script>
 </body>
 </html>
+
+<!-- 스마트폰 버튼 생성 -->
+<script>
+  if (!document.querySelector("meta[name=viewport]")) {
+    let meta = document.createElement('meta');
+    meta.name = 'viewport';
+    meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+    document.head.appendChild(meta);
+  }
+  setTimeout(() => {
+    if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
+      let div = document.createElement("div");
+      div.style.cssText = "position:fixed; bottom:20px; left:0; width:100%; text-align:center; z-index:99999;";
+      let keys = [{i:"⬅️", k:"ArrowLeft"}, {i:"⬆️", k:"ArrowUp"}, {i:"⬇️", k:"ArrowDown"}, {i:"➡️", k:"ArrowRight"}, {i:"🐾", k:" "}];
+      keys.forEach(k => {
+        let btn = document.createElement("button");
+        btn.innerText = k.i;
+        btn.style.cssText = "font-size:24px; width:55px; height:55px; margin:3px; border-radius:50%; border:2px solid #666; background:rgba(255,255,255,0.8);";
+        let press = (e, type) => {
+          e.preventDefault();
+          document.dispatchEvent(new KeyboardEvent(type, { key: k.k, code: k.k === ' ' ? 'Space' : k.k, bubbles: true }));
+          window.dispatchEvent(new KeyboardEvent(type, { key: k.k, code: k.k === ' ' ? 'Space' : k.k, bubbles: true }));
+        };
+        btn.ontouchstart = e => { btn.style.background = "rgba(200,200,200,1)"; press(e, "keydown"); };
+        btn.ontouchend = e => { btn.style.background = "rgba(255,255,255,0.8)"; press(e, "keyup"); };
+        div.appendChild(btn);
+      });
+      document.body.appendChild(div);
+    }
+  }, 500);
+</script>
